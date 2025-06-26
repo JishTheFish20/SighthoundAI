@@ -13,6 +13,8 @@ export default function UploadForm() {
   const [damageTypes, setDamageTypes] = useState<string[]>([])
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null)
   const [payout, setPayout] = useState<number | null>(null)
+  const [claimValidation, setClaimValidation] = useState<string | null>(null)
+  const [claimReport, setClaimReport] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -21,6 +23,8 @@ export default function UploadForm() {
     setDamageTypes([])
     setAnnotatedImage(null)
     setPayout(null)
+    setClaimValidation(null)
+    setClaimReport(null)
 
     if (!image) {
       setError('No image selected.')
@@ -53,6 +57,7 @@ export default function UploadForm() {
       return
     }
 
+    // Store initial claim
     const { error: insertError } = await supabase.from('claims').insert({
       user_id,
       image_url: imageUrl,
@@ -66,7 +71,7 @@ export default function UploadForm() {
       return
     }
 
-    // Send to YOLO backend
+    // 🔍 YOLO damage prediction
     const fastApiResponse = await fetch("https://car-damage-api-442009244853.europe-west1.run.app/predict", {
       method: "POST",
       body: (() => {
@@ -83,10 +88,10 @@ export default function UploadForm() {
     }
 
     const result = await fastApiResponse.json()
-    setDamageTypes(result.damage_type || [])
+    const detected = result.damage_type || []
+    setDamageTypes(detected)
     setAnnotatedImage(`data:image/png;base64,${result.image}`)
 
-    // Cost logic
     const damageCosts: { [key: string]: number } = {
       dent: 500,
       scratch: 200,
@@ -95,19 +100,58 @@ export default function UploadForm() {
       "light broken": 300,
       "tire flat": 150
     }
-// names: ['dent', 'scratch', 'crack', 'glass shatter', 'light broken', 'tire flat']
+
     const policyCaps: { [key: string]: number } = {
       Basic: 1000,
       Standard: 3000,
       Premium: 10000,
     }
 
-    const rawCost = result.damage_type.reduce(
+    const rawCost = detected.reduce(
       (sum: number, type: string) => sum + (damageCosts[type] || 0),
       0
     )
     const cappedPayout = Math.min(rawCost, policyCaps[policy] || 0)
     setPayout(cappedPayout)
+
+    // ✅ Gemini validation
+    const validationRes = await fetch('/api/validateClaim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description,
+        damageTypes: detected
+      })
+    })
+    const valData = await validationRes.json()
+    setClaimValidation(valData.validation || '')
+
+    // 🧾 Gemini summary
+    const reportRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `Summarize this car insurance claim:\nDescription: ${description}\nDetected damage: ${detected.join(', ')}\nPolicy: ${policy}\nEstimated payout: $${cappedPayout}`
+          }]
+        }]
+      })
+    })
+    const reportJson = await reportRes.json()
+    const report = reportJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    setClaimReport(report)
+
+    // Update claim with final data
+    await supabase
+      .from('claims')
+      .update({
+        payout: cappedPayout,
+        damage_type: detected,
+        claim_verification: valData.validation,
+        claim_report: report
+      })
+      .eq('image_url', imageUrl)
 
     setUploading(false)
     setMessage('Claim uploaded and analyzed successfully!')
@@ -126,10 +170,7 @@ export default function UploadForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto">
       <div className="mb-4">
-        <label
-          htmlFor="image-upload"
-          className="block cursor-pointer border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-100 transition"
-        >
+        <label htmlFor="image-upload" className="block cursor-pointer border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-100 transition">
           {image ? (
             <div>
               <p className="font-medium text-gray-700">Selected: {image.name}</p>
@@ -143,12 +184,7 @@ export default function UploadForm() {
             </div>
           ) : (
             <div>
-              <svg
-                className="mx-auto mb-2 h-8 w-8 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="mx-auto mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               <p className="text-gray-600">Click to upload or drag image here</p>
@@ -156,52 +192,26 @@ export default function UploadForm() {
             </div>
           )}
         </label>
-        <input
-          id="image-upload"
-          type="file"
-          accept="image/*"
-          onChange={handleImageChange}
-          required
-          className="hidden"
-        />
+        <input id="image-upload" type="file" accept="image/*" onChange={handleImageChange} required className="hidden" />
       </div>
 
-      <textarea
-        placeholder="Describe the incident..."
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        className="w-full border p-2 rounded"
-        rows={4}
-        required
-      />
+      <textarea placeholder="Describe the incident..." value={description} onChange={e => setDescription(e.target.value)} className="w-full border p-2 rounded" rows={4} required />
 
-      <select
-        value={policy}
-        onChange={e => setPolicy(e.target.value)}
-        className="w-full border p-2 rounded"
-      >
+      <select value={policy} onChange={e => setPolicy(e.target.value)} className="w-full border p-2 rounded">
         <option>Basic</option>
         <option>Standard</option>
         <option>Premium</option>
       </select>
 
-      <button
-        type="submit"
-        className="bg-blue-600 text-white px-4 py-2 rounded w-full"
-        disabled={uploading}
-      >
+      <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded w-full" disabled={uploading}>
         {uploading ? 'Uploading...' : 'Submit Claim'}
       </button>
 
       {message && (
-        <div className="bg-green-100 text-green-700 text-sm p-3 rounded mt-2 text-center">
-          {message}
-        </div>
+        <div className="bg-green-100 text-green-700 text-sm p-3 rounded mt-2 text-center">{message}</div>
       )}
       {error && (
-        <div className="bg-red-100 text-red-700 text-sm p-3 rounded mt-2 text-center">
-          {error}
-        </div>
+        <div className="bg-red-100 text-red-700 text-sm p-3 rounded mt-2 text-center">{error}</div>
       )}
 
       {annotatedImage && (
@@ -212,6 +222,18 @@ export default function UploadForm() {
             <p className="text-sm text-gray-600">Damage detected: {damageTypes.join(", ") || "None"}</p>
             <p className="text-md font-medium text-blue-700">Estimated payout: ${payout}</p>
           </div>
+        </div>
+      )}
+
+      {claimValidation && (
+        <div className="mt-4 bg-yellow-100 p-3 rounded text-sm">
+          <strong>Validation:</strong> {claimValidation}
+        </div>
+      )}
+
+      {claimReport && (
+        <div className="mt-4 bg-gray-100 p-3 rounded text-sm">
+          <strong>Claim Summary:</strong> {claimReport}
         </div>
       )}
     </form>

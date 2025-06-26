@@ -13,6 +13,7 @@ interface ClaimWithSignedUrl {
   payout: number | null
   damage_type: string[] | null
   created_at: string
+  claim_verification: string
 }
 
 export default function AdminClaimsPage() {
@@ -65,7 +66,13 @@ export default function AdminClaimsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {claims.map(claim => (
             <div key={claim.id} className="border rounded-lg shadow bg-white overflow-hidden">
-              <img src={claim.signed_url} alt="Crash" className="w-full h-48 object-cover" />
+             <div className="w-full h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <img
+                  src={claim.signed_url}
+                  alt="Crash"
+                  className="w-full h-full object-cover"
+                />
+              </div>
               <div className="p-4 space-y-2">
                 <p><strong>User ID:</strong> {claim.user_id}</p>
                 <p><strong>Description:</strong> {claim.description}</p>
@@ -74,6 +81,7 @@ export default function AdminClaimsPage() {
                 {claim.damage_type && (
                   <p><strong>Damage:</strong> {claim.damage_type.join(', ')}</p>
                 )}
+                <p><strong>Claim Verification:</strong> {claim.claim_verification}</p>
                 <p className="text-sm text-gray-500">
                   {new Date(claim.created_at).toLocaleString()}
                 </p>

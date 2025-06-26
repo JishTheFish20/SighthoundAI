@@ -75,8 +75,14 @@ export default function ClaimsPage() {
       ) : (
         <div className="space-y-4">
           {claims.map(claim => (
-            <div key={claim.id} className="bg-white rounded-lg shadow p-4 border">
-              <img src={claim.signed_url} alt="Crash" className="w-full h-48 object-cover rounded mb-2" />
+            <div key={claim.id} className="border rounded-lg shadow bg-white overflow-hidden">
+             <div className="w-full h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
+                <img
+                  src={claim.signed_url}
+                  alt="Crash"
+                  className="w-full h-full object-cover"
+                />
+              </div>
               <p><strong>Description:</strong> {claim.description}</p>
               <p><strong>Policy:</strong> {claim.policy_tier}</p>
               <p><strong>Payout:</strong> {claim.payout !== null ? `$${claim.payout}` : 'Pending'}</p>
