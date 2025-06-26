@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
-import Navbar from '@/components/navBar'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')

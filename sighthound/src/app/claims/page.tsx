@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import Navbar from '@/components/navBar'
 
 interface ClaimWithSignedUrl {
   id: string
