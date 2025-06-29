@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import ReactMarkdown from 'react-markdown'
 
 interface ClaimWithSignedUrl {
   id: string
@@ -13,7 +14,7 @@ interface ClaimWithSignedUrl {
   payout: number | null
   damage_type: string[] | null
   created_at: string
-  claim_verification: string
+  claim_verification: string | null
 }
 
 export default function AdminClaimsPage() {
@@ -66,7 +67,7 @@ export default function AdminClaimsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {claims.map(claim => (
             <div key={claim.id} className="border rounded-lg shadow bg-white overflow-hidden">
-             <div className="w-full h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
+              <div className="w-full h-64 bg-gray-100 flex items-center justify-center overflow-hidden">
                 <img
                   src={claim.signed_url}
                   alt="Crash"
@@ -81,7 +82,13 @@ export default function AdminClaimsPage() {
                 {claim.damage_type && (
                   <p><strong>Damage:</strong> {claim.damage_type.join(', ')}</p>
                 )}
-                <p><strong>Claim Verification:</strong> {claim.claim_verification}</p>
+                {claim.claim_verification && (
+                  <div className="bg-yellow-50 p-2 rounded text-sm prose prose-sm">
+                    <ReactMarkdown>
+                      {claim.claim_verification}
+                    </ReactMarkdown>
+                  </div>
+                )}
                 <p className="text-sm text-gray-500">
                   {new Date(claim.created_at).toLocaleString()}
                 </p>

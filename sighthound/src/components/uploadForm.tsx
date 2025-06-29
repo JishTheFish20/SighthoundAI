@@ -1,6 +1,23 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import ReactMarkdown from 'react-markdown'
+
+// Helper to clean and normalize Markdown text
+function cleanMarkdown(text: string): string {
+  return text
+    .replace(/nn/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\+/g, '')
+    .replace(/:\s*/g, ':\n\n')
+    .replace(/(^|\n)([a-zA-Z0-9 ]{1,30})\n/g, '$1* $2\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+$/gm, '')
+    .trim()
+}
+
+
+
 
 export default function UploadForm() {
   const [image, setImage] = useState<File | null>(null)
@@ -88,8 +105,12 @@ export default function UploadForm() {
     }
 
     const result = await fastApiResponse.json()
-    const detected = result.damage_type || []
-    setDamageTypes(detected)
+
+    const detections = result.detections || []
+    const detectedTypesWithArea = detections.map((d: any) =>
+      `${d.damage_type} (area ${(d.normalized_area * 100).toFixed(2)}%)`
+    )
+    setDamageTypes(detectedTypesWithArea)
     setAnnotatedImage(`data:image/png;base64,${result.image}`)
 
     const damageCosts: { [key: string]: number } = {
@@ -107,12 +128,16 @@ export default function UploadForm() {
       Premium: 10000,
     }
 
-    const rawCost = detected.reduce(
-      (sum: number, type: string) => sum + (damageCosts[type] || 0),
+    const rawCost = detections.reduce(
+      (sum: number, d: any) => sum + (damageCosts[d.damage_type] || 0),
       0
     )
     const cappedPayout = Math.min(rawCost, policyCaps[policy] || 0)
     setPayout(cappedPayout)
+
+    const detectionDescriptions = detections.map((d: any, i: number) =>
+      `#${i + 1}: ${d.damage_type}, area ${(d.normalized_area * 100).toFixed(2)}%`
+    ).join('\n')
 
     // ✅ Gemini validation
     const validationRes = await fetch('/api/validateClaim', {
@@ -120,11 +145,13 @@ export default function UploadForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         description,
-        damageTypes: detected
+        damageTypes: detections.map((d: any) => d.damage_type)
       })
     })
     const valData = await validationRes.json()
-    setClaimValidation(valData.validation || '')
+    const cleanedValidation = cleanMarkdown(valData.validation || '')
+
+    setClaimValidation(cleanedValidation)
 
     // 🧾 Gemini summary
     const reportRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`, {
@@ -133,23 +160,34 @@ export default function UploadForm() {
       body: JSON.stringify({
         contents: [{
           parts: [{
-            text: `Summarize this car insurance claim:\nDescription: ${description}\nDetected damage: ${detected.join(', ')}\nPolicy: ${policy}\nEstimated payout: $${cappedPayout}`
+            text: `Summarize this car insurance claim:
+
+Description: ${description}
+
+Detected damages:
+${detectionDescriptions}
+
+Policy: ${policy}
+
+Estimated payout: $${cappedPayout}`
           }]
         }]
       })
     })
     const reportJson = await reportRes.json()
-    const report = reportJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    setClaimReport(report)
+    const reportRaw = reportJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const cleanedReport = cleanMarkdown(reportRaw)
+
+    setClaimReport(cleanedReport)
 
     // Update claim with final data
     await supabase
       .from('claims')
       .update({
         payout: cappedPayout,
-        damage_type: detected,
-        claim_verification: valData.validation,
-        claim_report: report
+        damage_type: detectedTypesWithArea,
+        claim_verification: cleanedValidation,
+        claim_report: cleanedReport
       })
       .eq('image_url', imageUrl)
 
@@ -226,14 +264,14 @@ export default function UploadForm() {
       )}
 
       {claimValidation && (
-        <div className="mt-4 bg-yellow-100 p-3 rounded text-sm">
-          <strong>Validation:</strong> {claimValidation}
+        <div className="mt-4 bg-yellow-100 p-3 rounded text-sm prose prose-sm">
+          <ReactMarkdown>{claimValidation}</ReactMarkdown>
         </div>
       )}
 
       {claimReport && (
-        <div className="mt-4 bg-gray-100 p-3 rounded text-sm">
-          <strong>Claim Summary:</strong> {claimReport}
+        <div className="mt-4 bg-gray-100 p-3 rounded text-sm prose prose-sm">
+          <ReactMarkdown>{claimReport}</ReactMarkdown>
         </div>
       )}
     </form>
