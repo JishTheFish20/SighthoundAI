@@ -1,4 +1,3 @@
-import Navbar from "@/components/navBar";
 import UploadForm from "@/components/uploadForm";
 
 // src/app/page.tsx
