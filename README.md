@@ -31,10 +31,7 @@
 
 - **Instant Claim Assessment**  
   Generate a claim estimate within seconds, accelerating resolution.
-
-- **Fraud Detection (Optional)**  
-  Analyze image metadata to flag potentially fraudulent submissions.
-
+  
 - **Seamless Integration**  
   Built end-to-end with Next.js, FastAPI, Supabase, and YOLOv8.
 
