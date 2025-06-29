@@ -48,7 +48,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="bg-gray-100 py-6 px-6 text-center text-sm text-gray-500">
-        <p>© 2025 Corgi AI Insurance (Demo)</p>
+        <p>Created By: Joshua Tapia</p>
         <p>Built with Next.js, Tailwind, Supabase, and FastAPI</p>
       </footer>
     </main>
